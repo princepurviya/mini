@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bhopal Hostels — Local Storage Version</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    header { background: #4a6cf7; color: #fff; padding: 18px; }
+    .hostel-card img { width: 100%; height: 160px; object-fit: cover; border-radius: 8px; }
+    #authSection, #selectionCard, #results, #adminArea { display: none; }
+    .hostel-card { margin-bottom: 20px; transition: transform 0.2s; }
+    .hostel-card:hover { transform: translateY(-5px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <header class="text-center">
+    <h2 class="m-0">Bhopal Hostels</h2>
+  </header>
+
+  <div class="container py-4">
+    <!-- AUTH / LOGIN -->
+    <div id="authSection" class="card p-4 mb-4">
+      <h4>Quick Login</h4>
+      <div class="mb-3">
+        <input type="text" id="quickName" class="form-control mb-2" placeholder="Your name" required>
+        <input type="text" id="quickPhone" class="form-control mb-2" placeholder="Phone number" required>
+        <button id="quickLogin" class="btn btn-primary w-100">Login</button>
+      </div>
+      <div id="currentUser" class="mt-3"></div>
+    </div>
+
+    <!-- SELECTION -->
+    <div id="selectionCard" class="card p-4 mb-4">
+      <h4>Choose preferences</h4>
+      <div class="row g-2 mb-3">
+        <div class="col-md-6">
+          <select id="bedsSelect" class="form-select">
+            <option value="">Any beds</option>
+            <option value="1">1 Bed</option>
+            <option value="2">2 Beds</option>
+            <option value="3">3 Beds</option>
+            <option value="4">4 Beds</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <select id="priceSelect" class="form-select">
+            <option value="">Any price</option>
+            <option value="3000">Below ₹3000</option>
+            <option value="4000">Below ₹4000</option>
+            <option value="5000">Below ₹5000</option>
+            <option value="8000">Below ₹8000</option>
+          </select>
+        </div>
+      </div>
+      <button id="showHostelsBtn" class="btn btn-primary w-100">Show Hostels</button>
+    </div>
+
+    <!-- HOSTEL RESULTS -->
+    <div id="results">
+      <h4>Available Hostels</h4>
+      <div id="hostelGrid" class="row gy-3"></div>
+    </div>
+
+    <!-- BOOKING MODAL -->
+    <div id="bookingModal" class="modal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Book Hostel</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <input id="userFullName" class="form-control mb-2" placeholder="Full name" required>
+            <input id="userEmail" class="form-control mb-2" placeholder="Email (optional)" type="email">
+            <textarea id="userNote" class="form-control mb-2" placeholder="Special requirements (optional)"></textarea>
+            <div id="bookingHostelInfo" class="small text-muted mb-2"></div>
+          </div>
+          <div class="modal-footer">
+            <button id="submitBooking" class="btn btn-primary">Submit Booking</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN PANEL -->
+    <div class="card p-4 mt-4">
+      <h4>Admin Panel</h4>
+      <div class="mb-3">
+        <input type="password" id="adminPass" class="form-control mb-2" placeholder="Enter admin password">
+        <button id="adminLoginBtn" class="btn btn-outline-primary w-100">Login as Admin</button>
+      </div>
+      <div id="adminArea" style="display: none;">
+        <h5 class="mt-3">Add New Hostel</h5>
+        <input id="hName" class="form-control mb-2" placeholder="Hostel name" required>
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <input type="number" id="hBeds" class="form-control" placeholder="Beds" required>
+          </div>
+          <div class="col-6">
+            <input type="number" id="hPrice" class="form-control" placeholder="Price (₹)" required>
+          </div>
+        </div>
+        <input type="file" id="hImage" class="form-control mb-3" accept="image/*">
+        <button id="addHostelBtn" class="btn btn-success w-100 mb-3">Add Hostel</button>
+        
+        <h5 class="mt-4 mb-3">Bookings</h5>
+        <div id="bookingsList" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+          <!-- Bookings will be loaded here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // App State
+    let currentUser = null;
+    let selectedHostel = null;
+    const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
+
+    // Local Storage Keys
+    const LOCAL_STORAGE_KEYS = {
+      HOSTELS: 'bhopal_hostels',
+      BOOKINGS: 'bhopal_bookings',
+      USERS: 'bhopal_users'
+    };
+
+    // Initialize the app
+    document.addEventListener('DOMContentLoaded', function() {
+      // Show auth section
+      document.getElementById('authSection').style.display = 'block';
+      
+      // Initialize with sample data if empty
+      if (!localStorage.getItem(LOCAL_STORAGE_KEYS.HOSTELS)) {
+        const sampleHostels = [
+          { id: 'h1', name: 'shaamvi girls hostel indrapuri', beds: 2, price: 8000, image:'shamvi1.webp' },
+          { id: 'h2', name: 'ashirwad girls hostel indrapuri', beds: 2, price: 7500, image: 'image.png' },
+          { id: 'h3', name: 'nidhi girls hostel indrapuri', beds: 3, price: 6000, image: 'image copy.png' },
+          { id: 'h4', name: 'princess girls hostel indrapuri', beds: 2, price: 7000, image: 'image copy 2.png' },
+           { id: 'h1', name: 'Hari om boys hostel indrapuri', beds: 4, price: 5000, image:'image copy 4.png' },
+          { id: 'h2', name: 'S R girls hostel', beds: 1, price: 8000, image: 'image copy 5.png' },
+          { id: 'h3', name: 'Suvidha girls Hostel', beds: 3, price: 5500, image: 'image copy 6.png' },
+          { id: 'h4', name: 'Strikers Girls Hostel', beds: 1, price: 7500, image: 'image copy 7.png' },
+          { id: 'h5', name: 'Maa lakshmi girls hostel', beds: 2, price: 7000, image: 'image copy 8.png' }
+        ];
+        localStorage.setItem(LOCAL_STORAGE_KEYS.HOSTELS, JSON.stringify(sampleHostels));
+      }
+
+      // Event Listeners
+      document.getElementById('quickLogin').addEventListener('click', handleQuickLogin);
+      document.getElementById('showHostelsBtn').addEventListener('click', showFilteredHostels);
+      document.getElementById('addHostelBtn').addEventListener('click', addHostel);
+      document.getElementById('adminLoginBtn').addEventListener('click', handleAdminLogin);
+      document.getElementById('submitBooking').addEventListener('click', submitBooking);
+      document.getElementById('refreshBookings').addEventListener('click', loadBookings);
+    });
+
+    // Quick Login Handler
+    function handleQuickLogin() {
+      const name = document.getElementById('quickName').value.trim();
+      const phone = document.getElementById('quickPhone').value.trim();
+      
+      if (!name || !phone) {
+        alert('Please enter both name and phone number');
+        return;
+      }
+      
+      currentUser = {
+        id: 'user_' + Date.now(),
+        name: name,
+        phone: phone,
+        email: ''
+      };
+      
+      // Save user to localStorage
+      const users = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || '[]');
+      users.push(currentUser);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(users));
+      
+      // Update UI
+      document.getElementById('authSection').style.display = 'none';
+      document.getElementById('selectionCard').style.display = 'block';
+      document.getElementById('currentUser').innerHTML = `
+        <div class="alert alert-success py-2">
+          Logged in as: ${name} (${phone})
+        </div>
+      `;
+      
+      // Show hostels
+      showFilteredHostels();
+    }
+
+    // Show filtered hostels
+    function showFilteredHostels() {
+      const beds = document.getElementById('bedsSelect').value;
+      const price = document.getElementById('priceSelect').value;
+      const hostels = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.HOSTELS) || '[]');
+      
+      const filtered = hostels.filter(hostel => {
+        const bedsMatch = !beds || parseInt(hostel.beds) === parseInt(beds);
+        const priceMatch = !price || parseInt(hostel.price) <= parseInt(price);
+        return bedsMatch && priceMatch;
+      });
+      
+      renderHostels(filtered);
+      document.getElementById('results').style.display = 'block';
+    }
+
+    // Render hostels
+    function renderHostels(hostels) {
+      const container = document.getElementById('hostelGrid');
+      container.innerHTML = '';
+      
+      if (hostels.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center py-4"><p>No hostels found matching your criteria.</p></div>';
+        return;
+      }
+      
+      hostels.forEach(hostel => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 mb-4';
+        // Resolve image source: if value looks like a stored key (img_*) fetch DataURL from localStorage
+        const imgSrc = (hostel.image && typeof hostel.image === 'string' && hostel.image.startsWith('img_'))
+          ? (localStorage.getItem(hostel.image) || 'https://via.placeholder.com/400x200?text=Hostel')
+          : (hostel.image || 'https://via.placeholder.com/400x200?text=Hostel');
+
+        col.innerHTML = `
+          <div class="card h-100 hostel-card">
+            <div class="card-img-top bg-light" style="height: 160px; overflow: hidden;">
+              <img src="${imgSrc}" 
+                   alt="${hostel.name}" class="w-100 h-100 object-fit-cover">
+            </div>
+            <div class="card-body d-flex flex-column">
+              <h5 class="card-title">${hostel.name}</h5>
+              <p class="card-text">
+                <i class="fas fa-bed me-2"></i> ${hostel.beds} Beds<br>
+                <i class="fas fa-rupee-sign me-2"></i> ₹${hostel.price}/month
+              </p>
+              <button class="btn btn-primary mt-auto book-now" data-id="${hostel.id}">
+                Book Now
+              </button>
+            </div>
+          </div>
+        ;`
+        container.appendChild(col);
+      });
+
+      // Add event listeners to book buttons
+      document.querySelectorAll('.book-now').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const hostelId = this.getAttribute('data-id');
+          const hostels = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.HOSTELS) || '[]');
+          const selected = hostels.find(h => h.id === hostelId);
+          if (selected) {
+            openBooking(selected);
+          }
+        });
+      });
+    }
+
+    // Open booking modal
+    function openBooking(hostel) {
+      selectedHostel = hostel;
+      document.getElementById('bookingHostelInfo').textContent = 
+        `Booking ${hostel.name} - ${hostel.beds} Bed(s) - ₹${hostel.price}/month`;
+      document.getElementById('userFullName').value = currentUser?.name || '';
+      document.getElementById('userEmail').value = currentUser?.email || '';
+      bookingModal.show();
+    }
+
+    // Submit booking
+    function submitBooking() {
+      if (!currentUser) {
+        alert('Please login first');
+        return;
+      }
+
+      const booking = {
+        id: 'b' + Date.now(),
+        userId: currentUser.id,
+        userName: document.getElementById('userFullName').value.trim() || currentUser.name,
+        userEmail: document.getElementById('userEmail').value.trim(),
+        userPhone: currentUser.phone,
+        hostelId: selectedHostel.id,
+        hostelName: selectedHostel.name,
+        beds: selectedHostel.beds,
+        price: selectedHostel.price,
+        status: 'pending',
+        note: document.getElementById('userNote').value.trim(),
+        createdAt: new Date().toISOString()
+      };
+
+      // Save to localStorage
+      const bookings = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.BOOKINGS) || '[]');
+      bookings.push(booking);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.BOOKINGS, JSON.stringify(bookings));
+
+      // Show success message
+      alert(`Booking confirmed for ${booking.hostelName}!`);
+      bookingModal.hide();
+    }
+
+    // Admin Login
+    function handleAdminLogin() {
+      const password = document.getElementById('adminPass').value;
+      
+      if (password === 'admin123') {
+        document.getElementById('adminArea').style.display = 'block';
+        loadBookings();
+      } else {
+        alert('Incorrect admin password');
+      }
+    }
+
+    // Add new hostel
+    function addHostel() {
+      const name = document.getElementById('hName').value.trim();
+      const beds = parseInt(document.getElementById('hBeds').value);
+      const price = parseInt(document.getElementById('hPrice').value);
+      const imageInput = document.getElementById('hImage');
+      
+      if (!name || isNaN(beds) || isNaN(price)) {
+        alert('Please fill all fields with valid values');
+        return;
+      }
+
+      // Create a unique ID for the image
+      const imageId = 'img_' + Date.now();
+      let imageUrl = '';
+
+      // Handle image upload if a file is selected
+      if (imageInput.files && imageInput.files[0]) {
+        const file = imageInput.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          // Store the image data in localStorage with a unique key
+          localStorage.setItem(imageId, e.target.result);
+          
+          // Create the new hostel with the image URL
+          const newHostel = {
+            id: 'h' + Date.now(),
+            name: name,
+            beds: beds,
+            price: price,
+            image: imageId // Store the unique ID to retrieve the image later
+          };
+          
+          // Save to localStorage
+          const hostels = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.HOSTELS) || '[]');
+          hostels.push(newHostel);
+          localStorage.setItem(LOCAL_STORAGE_KEYS.HOSTELS, JSON.stringify(hostels));
+          
+          // Reset form and show success
+          resetForm();
+          showFilteredHostels();
+        };
+        
+        reader.readAsDataURL(file);
+      } else {
+        // If no image is selected, use a placeholder
+        const newHostel = {
+          id: 'h' + Date.now(),
+          name: name,
+          beds: beds,
+          price: price,
+          image: '' // Will use placeholder in renderHostels function
+        };
+        
+        const hostels = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.HOSTELS) || '[]');
+        hostels.push(newHostel);
+        localStorage.setItem(LOCAL_STORAGE_KEYS.HOSTELS, JSON.stringify(hostels));
+        
+        resetForm();
+        showFilteredHostels();
+      }
+    }
+    
+    // Helper function to reset the form
+    function resetForm() {
+      document.getElementById('hName').value = '';
+      document.getElementById('hBeds').value = '';
+      document.getElementById('hPrice').value = '';
+      document.getElementById('hImage').value = '';
+      alert('Hostel added successfully!');
+    }
+
+    // Load and display bookings
+    function loadBookings() {
+      const bookingsList = document.getElementById('bookingsList');
+      const bookings = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.BOOKINGS) || '[]');
+      
+      if (bookings.length === 0) {
+        bookingsList.innerHTML = '<div class="alert alert-info mb-0">No bookings found.</div>';
+        return;
+      }
+
+      let html = `
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>User</th>
+                <th>Hostel</th>
+                <th>Price</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      bookings.forEach(booking => {
+        const date = new Date(booking.createdAt).toLocaleString();
+        html += `
+          <tr>
+            <td>${date}</td>
+            <td>${booking.userName}<br><small>${booking.userPhone}</small></td>
+            <td>${booking.hostelName}</td>
+            <td>₹${booking.price}</td>
+            <td><span class="badge bg-${booking.status === 'confirmed' ? 'success' : 'warning'}">
+              ${booking.status}
+            </span></td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      bookingsList.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
